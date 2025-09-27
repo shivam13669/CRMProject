@@ -39,6 +39,7 @@ async function initializeDatabase() {
     
     isInitialized = true;
     console.log(`SQLite database initialized successfully at: ${dbPath}`);
+
     
   } catch (error) {
     console.error('Error initializing database:', error);
@@ -54,11 +55,32 @@ async function createTables() {
       CREATE TABLE IF NOT EXISTS admins (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         username TEXT UNIQUE NOT NULL,
+        name TEXT NOT NULL,
+        role TEXT CHECK(role IN ('central','admin')) NOT NULL DEFAULT 'admin',
         password_hash TEXT NOT NULL,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
       )
     `);
+
+    // Ensure new admin columns exist (for existing databases)
+    try {
+      const tiAdmins = db.exec("PRAGMA table_info(admins)");
+
+      const adminCols: string[] = [];
+      if (tiAdmins && tiAdmins[0] && tiAdmins[0].values) {
+        for (const row of tiAdmins[0].values as any[]) adminCols.push(String(row[1]));
+      }
+      if (!adminCols.includes('name')) {
+        try {
+    db.run("ALTER TABLE admins ADD COLUMN name TEXT NOT NULL DEFAULT 'Admin'");
+} catch {}
+
+      }
+      if (!adminCols.includes('role')) {
+        try { db.run("ALTER TABLE admins ADD COLUMN role TEXT CHECK(role IN ('central','admin')) NOT NULL DEFAULT 'admin'"); } catch {}
+      }
+    } catch {}
 
     // Customers table (base)
     db.run(`
@@ -82,19 +104,19 @@ async function createTables() {
     // Ensure new columns exist on customers
     const cols: string[] = [];
     try {
-      const ti = db.exec(`PRAGMA table_info(customers)`);
+      const ti = db.exec("PRAGMA table_info(customers)");
       if (ti && ti[0] && ti[0].values) {
         for (const row of ti[0].values as any[]) cols.push(String(row[1]));
       }
     } catch {}
     if (!cols.includes('notes')) {
-      try { db.run(`ALTER TABLE customers ADD COLUMN notes TEXT DEFAULT ''`); } catch {}
+      try { db.run("ALTER TABLE customers ADD COLUMN notes TEXT DEFAULT ''"); } catch {}
     }
     if (!cols.includes('tags')) {
-      try { db.run(`ALTER TABLE customers ADD COLUMN tags TEXT DEFAULT ''`); } catch {}
+      try { db.run("ALTER TABLE customers ADD COLUMN tags TEXT DEFAULT ''"); } catch {}
     }
     if (!cols.includes('expireDate')) {
-      try { db.run(`ALTER TABLE customers ADD COLUMN expireDate TEXT`); } catch {}
+      try { db.run("ALTER TABLE customers ADD COLUMN expireDate TEXT"); } catch {}
     }
 
     // Documents table (file metadata only)
@@ -200,16 +222,32 @@ async function createDefaultAdmin() {
       const hashedPassword = await bcrypt.hash(defaultPassword, 10);
 
       db.run(`
-        INSERT INTO admins (username, password_hash)
-        VALUES (?, ?)
-      `, ['admin@gmail.com', hashedPassword]);
+        INSERT INTO admins (username, name, role, password_hash)
+        VALUES (?, ?, ?, ?)
+      `, ['admin@gmail.com', 'Admin', 'admin', hashedPassword]);
 
       console.log('Default admin user created: username=admin@gmail.com, password=admin123');
-      console.log('⚠️  Please change the default password in production!');
-
+      console.log('⚠  Please change the default password in production!');
       await saveDatabase();
-    } else {
-      console.log('Admin user already exists, skipping creation');
+    }
+
+    // Ensure central admin exists
+    try {
+      const checkCentral = db.prepare('SELECT id FROM admins WHERE username = ?');
+      checkCentral.bind(['admincr@gmail.com']);
+      const hasCentral = checkCentral.step();
+      if (!hasCentral) {
+        const centralPassword = 'admin1234';
+        const centralHash = await bcrypt.hash(centralPassword, 10);
+        db.run(`
+          INSERT INTO admins (username, name, role, password_hash)
+          VALUES (?, ?, ?, ?)
+        `, ['admincr@gmail.com', 'Central Admin', 'central', centralHash]);
+        console.log('Central admin created: username=admincr@gmail.com, password=admin1234');
+        await saveDatabase();
+      }
+    } catch (e) {
+      console.error('Error ensuring central admin:', e);
     }
   } catch (error) {
     console.error('Error creating default admin:', error);
@@ -347,14 +385,14 @@ export const customerDB = {
           ]);
           added++;
         } catch (error) {
-          errors.push(`Error adding customer ${customer.regId}: ${error}`);
+          errors.push("Error adding customer ${customer.regId}: ${error}");
         }
       }
       
       await saveDatabase();
       return { success: true, added, errors };
     } catch (error) {
-      return { success: false, added: 0, errors: [`Transaction failed: ${error}`] };
+      return { success: false, added: 0, errors: ['Transaction failed: ${error}'] };
     }
   },
 
@@ -420,7 +458,7 @@ export const customerDB = {
           db.run('DELETE FROM customers WHERE id = ?', [id]);
           deleted++;
         } catch (error) {
-          console.error(`Error deleting customer ${id}:`, error);
+          console.error('Error deleting customer ${id}:, error');
         }
       }
       
@@ -507,7 +545,7 @@ export const customerDB = {
 
       if (filters.search) {
         query += ' AND (name LIKE ? OR contact LIKE ? OR regId LIKE ?)';
-        const searchTerm = `%${filters.search}%`;
+        const searchTerm =' %${filters.search}%';
         params.push(searchTerm, searchTerm, searchTerm);
       }
 
@@ -548,7 +586,7 @@ export const customerDB = {
     try {
       await ensureInitialized();
       db.run(
-        `INSERT INTO documents (id, customerId, type, filename, filepath) VALUES (?, ?, ?, ?, ?)`,
+        'INSERT INTO documents (id, customerId, type, filename, filepath) VALUES (?, ?, ?, ?, ?)',
         [doc.id, doc.customerId, doc.type, doc.filename, doc.filepath]
       );
       await saveDatabase();
@@ -572,7 +610,7 @@ export const customerDB = {
           customerId: String(row.customerId),
           type: String(row.type),
           filename: String(row.filename),
-          url: `/uploads/${path.basename(String(row.filepath))}`,
+          url: '/uploads/${path.basename(String(row.filepath))}',
           uploadedAt: String(row.uploaded_at)
         });
       }
@@ -601,7 +639,8 @@ export const customerDB = {
       }
       await saveDatabase();
       return true;
-    } catch (error) {
+    } 
+    catch (error) {
       console.error('Error deleting document:', error);
       return false;
     }
@@ -612,7 +651,7 @@ export const customerDB = {
     try {
       await ensureInitialized();
       db.run(
-        `INSERT INTO customer_history (id, customerId, action, note) VALUES (?, ?, ?, ?)`,
+     'INSERT INTO customer_history (id, customerId, action, note) VALUES (?, ?, ?, ?)',
         [entry.id, entry.customerId, entry.action, entry.note || null]
       );
       await saveDatabase();
@@ -667,7 +706,13 @@ export const authDB = {
       if (isValid) {
         // Return admin data without password hash
         const { password_hash, ...adminData } = admin;
-        return { success: true, admin: adminData };
+        const normalized = {
+          id: String(adminData.id),
+          username: String(adminData.username),
+          name: String((adminData as any).name || 'Admin'),
+          role: String((adminData as any).role || 'admin')
+        };
+        return { success: true, admin: normalized };
       } else {
         return { success: false };
       }
@@ -678,12 +723,12 @@ export const authDB = {
   },
 
   // Create new admin
-  async createAdmin(username: string, password: string): Promise<boolean> {
+  async createAdmin(name: string, username: string, password: string, role: 'central' | 'admin' = 'admin'): Promise<boolean> {
     try {
       await ensureInitialized();
       
       const hashedPassword = await bcrypt.hash(password, 10);
-      db.run('INSERT INTO admins (username, password_hash) VALUES (?, ?)', [username, hashedPassword]);
+      db.run('INSERT INTO admins (username, name, role, password_hash) VALUES (?, ?, ?, ?)', [username, name, role, hashedPassword]);
       await saveDatabase();
       return true;
     } catch (error) {
@@ -712,7 +757,7 @@ export const authDB = {
     try {
       await ensureInitialized();
 
-      const stmt = db.prepare('SELECT id, username, password_hash, created_at, updated_at FROM admins');
+      const stmt = db.prepare('SELECT id, username, name, role, created_at, updated_at FROM admins');
       const results = [];
       while (stmt.step()) {
         results.push(stmt.getAsObject());
@@ -728,4 +773,4 @@ export const authDB = {
 // Initialize database on module load (but don't wait for it)
 initializeDatabase().catch(console.error);
 
-console.log('SQLite database service initialized using sql.js');
+console.log('SQLite database service initialized using sql.js');

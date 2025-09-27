@@ -3,7 +3,7 @@ import express from "express";
 import cors from "cors";
 import path from "path";
 import { handleDemo } from "./routes/demo";
-import { handleLogin, handleLogout, handleProfile, handleChangePassword, handleViewAdmins } from "./routes/auth";
+import { handleLogin, handleLogout, handleProfile, handleChangePassword, handleViewAdmins, handleCreateAdmin } from "./routes/auth";
 import { authenticateToken } from "./middleware/auth";
 import {
   getCustomers,
@@ -48,8 +48,9 @@ export function createServer() {
   app.get("/api/auth/profile", authenticateToken, handleProfile);
   app.post("/api/auth/change-password", authenticateToken, handleChangePassword);
 
-  // Debug/Admin management routes
-  app.get("/api/auth/admins", handleViewAdmins);
+  // Admin management routes (central-only)
+  app.get("/api/auth/admins", authenticateToken, handleViewAdmins);
+  app.post("/api/auth/admins", authenticateToken, handleCreateAdmin);
 
   // Protected routes (require authentication)
   // Customer statistics (using real database data)
@@ -120,5 +121,5 @@ export function createServer() {
     }
   });
 
-  return app;
+  return app;
 }

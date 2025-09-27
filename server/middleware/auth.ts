@@ -8,6 +8,8 @@ declare global {
       admin?: {
         id: string;
         username: string;
+        name: string;
+        role: 'central' | 'admin';
       };
     }
   }
@@ -34,11 +36,11 @@ export const authenticateToken = (req: Request, res: Response, next: NextFunctio
       });
     }
 
-    req.admin = decoded as { id: string; username: string };
+    req.admin = decoded as { id: string; username: string; name: string; role: 'central' | 'admin' };
     next();
   });
 };
 
-export const generateToken = (admin: { id: string; username: string }) => {
-  return jwt.sign(admin, JWT_SECRET, { expiresIn: '24h' });
+export const generateToken = (admin: { id: string; username: string; name: string; role: 'central' | 'admin' }) => {
+  return jwt.sign(admin, JWT_SECRET, { expiresIn: '24h' });
 };

@@ -38,9 +38,10 @@ export default function Layout({ children }: LayoutProps) {
 
   const DesktopNav: React.FC = () => {
     const location = useLocation();
+    const items = admin?.role === 'central' ? [...navigation, { name: 'Admin Users', href: '/admin-users', icon: Settings }] : navigation;
     return (
       <nav className="hidden md:flex space-x-1">
-        {navigation.map((item) => {
+        {items.map((item) => {
           const isActive = location.pathname === item.href;
           const Icon = item.icon;
           return (
@@ -64,10 +65,11 @@ export default function Layout({ children }: LayoutProps) {
 
   const MobileNav: React.FC = () => {
     const location = useLocation();
+    const items = admin?.role === 'central' ? [...navigation, { name: 'Admin Users', href: '/admin-users', icon: Settings }] : navigation;
     return (
       <nav className="md:hidden bg-white border-b border-gray-200 px-4 py-2">
         <div className="flex space-x-1 overflow-x-auto">
-          {navigation.map((item) => {
+          {items.map((item) => {
             const isActive = location.pathname === item.href;
             const Icon = item.icon;
             return (
@@ -139,10 +141,14 @@ export default function Layout({ children }: LayoutProps) {
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-48">
-                <DropdownMenuItem className="cursor-pointer">
-                  <Settings className="w-4 h-4 mr-2" />
-                  Settings
-                </DropdownMenuItem>
+                {admin?.role === 'central' && (
+                  <Link to="/admin-users">
+                    <DropdownMenuItem className="cursor-pointer">
+                      <Settings className="w-4 h-4 mr-2" />
+                      Admin Users
+                    </DropdownMenuItem>
+                  </Link>
+                )}
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={logout} className="cursor-pointer text-red-600">
                   <LogOut className="w-4 h-4 mr-2" />
@@ -179,6 +185,6 @@ export default function Layout({ children }: LayoutProps) {
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {children}
       </main>
-    </div>
-  );
+    </div>
+  );
 }

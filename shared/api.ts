@@ -4,22 +4,30 @@
  */
 
 // Authentication types
+export type AdminRole = 'central' | 'admin';
+
 export interface LoginRequest {
   username: string;
   password: string;
 }
 
-export interface LoginResponse {
-  token: string;
-  admin: {
-    id: string;
-    username: string;
-  };
-}
-
 export interface AdminUser {
   id: string;
   username: string;
+  name: string;
+  role: AdminRole;
+}
+
+export interface LoginResponse {
+  token: string;
+  admin: AdminUser;
+}
+
+export interface CreateAdminRequest {
+  name: string;
+  username: string;
+  password: string;
+  role?: AdminRole; // defaults to 'admin' server-side
 }
 
 // Customer data types
@@ -116,5 +124,5 @@ export interface ApiResponse<T = any> {
 }
 
 export interface DemoResponse {
-  message: string;
+  message: string;
 }
